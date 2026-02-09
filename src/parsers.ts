@@ -66,7 +66,7 @@ export async function parseDocument(
 }
 
 /**
- * Parse PDF document
+ * Parse PDF document with improved page and chapter detection
  */
 async function parsePDF(filePath: string): Promise<PartialParsedDocument> {
   const buffer = await fs.readFile(filePath);
@@ -85,17 +85,95 @@ async function parsePDF(filePath: string): Promise<PartialParsedDocument> {
     },
   };
 
-  // Split into pages as top-level sections
-  const pageTexts = data.text.split(/\f/); // Form feed character
-  let position = 0;
+  // Try multiple strategies to split PDF into pages
+  let pageTexts: string[] = [];
 
+  // Strategy 1: Form feed characters
+  if (data.text.includes("\f")) {
+    pageTexts = data.text.split(/\f/);
+  }
+  // Strategy 2: Use pdf-parse's numpages to estimate page boundaries
+  else if (data.numpages && data.numpages > 1) {
+    const avgCharsPerPage = Math.floor(data.text.length / data.numpages);
+    for (let i = 0; i < data.numpages; i++) {
+      const start = i * avgCharsPerPage;
+      const end = (i + 1) * avgCharsPerPage;
+      pageTexts.push(data.text.substring(start, end));
+    }
+  }
+  // Strategy 3: Try to detect chapter headings as natural breaks
+  else {
+    // Split by common chapter patterns
+    const chapterPatterns = [
+      /\n\s*CHAPTER\s+[IVXLCDM]+\n/gi,
+      /\n\s*Chapter\s+\d+\n/gi,
+      /\n\s*#\s+[A-Z][A-Z\s]+\n/g,
+      /\n\s*Part\s+[IVXLCDM]+\n/gi,
+    ];
+
+    let splits = [data.text];
+    for (const pattern of chapterPatterns) {
+      const newSplits: string[] = [];
+      for (const split of splits) {
+        const parts = split.split(pattern);
+        newSplits.push(...parts);
+      }
+      if (newSplits.length > splits.length) {
+        splits = newSplits;
+        break; // Use the first pattern that works
+      }
+    }
+    pageTexts = splits;
+  }
+
+  // If still only one page, split by paragraphs (every 5000 chars ≈ 2-3 pages)
+  if (pageTexts.length === 1 && pageTexts[0].length > 5000) {
+    pageTexts = [];
+    let current = "";
+    let position = 0;
+    const lines = data.text.split("\n");
+    let currentSectionChars = 0;
+    const charsPerSection = 5000; // Approx 2-3 pages per section
+
+    for (const line of lines) {
+      current += line + "\n";
+      currentSectionChars += line.length + 1;
+
+      if (currentSectionChars >= charsPerSection) {
+        pageTexts.push(current.trim());
+        current = "";
+        currentSectionChars = 0;
+      }
+    }
+    if (current.trim()) {
+      pageTexts.push(current.trim());
+    }
+  }
+
+  // Create page/section nodes
+  let position = 0;
   pageTexts.forEach((pageText: string, index: number) => {
     if (pageText.trim().length === 0) return;
 
-    const pageNode: DocumentNode = {
-      id: `page-${index + 1}`,
+    // Try to detect a heading/title from the first few lines
+    const lines = pageText.trim().split("\n").slice(0, 5);
+    let title = `Section ${index + 1}`;
+
+    // Look for all-caps headings or numbered patterns
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.length > 3 && trimmed.length < 100 &&
+          (trimmed === trimmed.toUpperCase() ||
+           /^(CHAPTER|Chapter|Part|#|\d+\.)\s+/.test(trimmed))) {
+        title = trimmed;
+        break;
+      }
+    }
+
+    const sectionNode: DocumentNode = {
+      id: `section-${index + 1}`,
       type: "section",
-      title: `Page ${index + 1}`,
+      title,
       content: pageText.trim(),
       level: 1,
       pageNumber: index + 1,
@@ -107,7 +185,7 @@ async function parsePDF(filePath: string): Promise<PartialParsedDocument> {
       },
     };
 
-    tree.children.push(pageNode);
+    tree.children.push(sectionNode);
     position += pageText.length;
   });
 
@@ -115,7 +193,7 @@ async function parsePDF(filePath: string): Promise<PartialParsedDocument> {
     type: "pdf",
     tree,
     metadata: {
-      totalPages: data.numpages,
+      totalPages: data.numpages || pageTexts.length,
       totalChars: data.text.length,
       totalWords: data.text.split(/\s+/).length,
     },

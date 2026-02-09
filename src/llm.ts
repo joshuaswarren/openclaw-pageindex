@@ -77,7 +77,15 @@ function buildSearchContext(documents: DocumentNode[], query: SearchQuery): stri
   const parts: string[] = [];
 
   for (const doc of documents) {
-    parts.push(flattenNode(doc, 0));
+    // Skip root nodes from context - they're just containers
+    if (doc.type === "root") {
+      // Only include children, not the root itself
+      for (const child of doc.children) {
+        parts.push(flattenNode(child, 0));
+      }
+    } else {
+      parts.push(flattenNode(doc, 0));
+    }
   }
 
   return parts.join("\n\n");
@@ -99,6 +107,7 @@ function flattenNode(node: DocumentNode, depth: number): string {
     text += "\n";
   }
 
+  // Content preview: 500 chars for local LLMs with smaller context windows
   text += `${indent}${node.content.substring(0, 500)}${node.content.length > 500 ? "..." : ""}\n`;
 
   for (const child of node.children) {
@@ -112,23 +121,27 @@ function flattenNode(node: DocumentNode, depth: number): string {
  * Build search prompt for LLM
  */
 function buildSearchPrompt(query: string, context: string): string {
+  // Context limit for local LLMs - 8K chars is safe for most quantized models
+  // 4-bit models typically have smaller context windows, so we use a conservative limit
+  const maxContextLength = 8000;
+
   return `You are a document search assistant for OpenClaw. Your task is to find the most relevant sections of documents for a given query.
 
 QUERY: ${query}
 
 DOCUMENT CONTENT:
-${context.substring(0, 15000)}${context.length > 15000 ? "...\n\n[Content truncated for brevity]" : ""}
+${context.substring(0, maxContextLength)}${context.length > maxContextLength ? "...\n\n[Content truncated for brevity]" : ""}
 
 INSTRUCTIONS:
 1. Read the query carefully
 2. Review the document content above
 3. Identify the most relevant sections that answer the query
-4. Return the node IDs of the most relevant sections, one per line
-5. Each node ID is marked with [ID: node-...] in the content
+4. Return the IDs of the most relevant sections, one per line
+5. Each section ID is marked with [ID: section-...] in the content
 6. Prioritize sections that directly answer the query
-7. Return ONLY node IDs, one per line, in order of relevance
+7. Return ONLY section IDs, one per line, in order of relevance
 
-Format: Return one node ID per line, starting with "node-"`;
+Format: Return one section ID per line, starting with "section-"`;
 }
 
 /**
@@ -294,7 +307,8 @@ function parseLLMResponse(response: string): string[] {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.startsWith("node-")) {
+    // Accept both node- and section- prefixes for flexibility
+    if (trimmed.startsWith("node-") || trimmed.startsWith("section-")) {
       ids.push(trimmed);
     }
   }
@@ -363,6 +377,14 @@ function fallbackSearch(documents: DocumentNode[], query: SearchQuery): SearchRe
 
   function searchNodes(nodes: DocumentNode[]): void {
     for (const node of nodes) {
+      // Skip root nodes - they're just containers with full content
+      if (node.type === "root") {
+        if (node.children.length > 0) {
+          searchNodes(node.children);
+        }
+        continue;
+      }
+
       const contentLower = node.content.toLowerCase();
       const matchCount = keywords.filter((kw) => contentLower.includes(kw)).length;
 
