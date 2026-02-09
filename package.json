@@ -1,7 +1,7 @@
 {
-  "name": "pageindex-ts",
+  "name": "openclaw-pageindex",
   "version": "0.1.0",
-  "description": "TypeScript reimplementation of PageIndex - vectorless, reasoning-based document search using LLM traversal of hierarchical document trees",
+  "description": "OpenClaw PageIndex - vectorless, reasoning-based document search using OpenClaw's LLM providers. Native TypeScript implementation of PageIndex's hierarchical document tree traversal.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -34,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/joshuaswarren/pageindex-ts.git"
+    "url": "https://github.com/joshuaswarren/openclaw-pageindex.git"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

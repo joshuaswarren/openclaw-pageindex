@@ -1,16 +1,27 @@
 /**
- * LLM client for reasoning-based document traversal
+ * LLM client for OpenClaw integration
  */
 
 import type { DocumentNode, SearchResult, SearchQuery, LLMProvider } from "./types.js";
 
 /**
- * LLM-based search using document tree traversal
+ * OpenClaw LLM provider interface
+ */
+interface OpenClawLLMProvider {
+  name: string;
+  baseUrl?: string;
+  apiKey?: string;
+  model: string;
+  api?: "anthropic-messages" | "openai-completions" | "google-generative-ai";
+}
+
+/**
+ * LLM-based search using document tree traversal with OpenClaw integration
  */
 export async function searchWithLLM(
   documents: DocumentNode[],
   query: SearchQuery,
-  provider: LLMProvider
+  provider: OpenClawLLMProvider
 ): Promise<SearchResult[]> {
   const results: SearchResult[] = [];
 
@@ -21,7 +32,7 @@ export async function searchWithLLM(
   const prompt = buildSearchPrompt(query.query, context);
 
   try {
-    const response = await callLLM(prompt, provider);
+    const response = await callOpenClawLLM(prompt, provider);
     const relevantIds = parseLLMResponse(response);
 
     // Build results from relevant nodes
@@ -53,7 +64,7 @@ export async function searchWithLLM(
 }
 
 /**
- * Build search context from document trees
+ * Build search context from document trees with node IDs
  */
 function buildSearchContext(documents: DocumentNode[], query: SearchQuery): string {
   const parts: string[] = [];
@@ -66,14 +77,19 @@ function buildSearchContext(documents: DocumentNode[], query: SearchQuery): stri
 }
 
 /**
- * Flatten node tree into text representation
+ * Flatten node tree into text representation with node IDs
  */
 function flattenNode(node: DocumentNode, depth: number): string {
   const indent = "  ".repeat(depth);
   let text = "";
 
+  // Add node ID for LLM reference
+  text += `${indent}[ID: ${node.id}]`;
+
   if (node.title) {
-    text += `${indent}${"#".repeat(node.level)} ${node.title}\n`;
+    text += ` ${"#".repeat(node.level)} ${node.title}\n`;
+  } else {
+    text += "\n";
   }
 
   text += `${indent}${node.content.substring(0, 500)}${node.content.length > 500 ? "..." : ""}\n`;
@@ -89,37 +105,165 @@ function flattenNode(node: DocumentNode, depth: number): string {
  * Build search prompt for LLM
  */
 function buildSearchPrompt(query: string, context: string): string {
-  return `You are a document search assistant. Your task is to find the most relevant sections of documents for a given query.
+  return `You are a document search assistant for OpenClaw. Your task is to find the most relevant sections of documents for a given query.
 
 QUERY: ${query}
 
 DOCUMENT CONTENT:
-${context.substring(0, 10000)}${context.length > 10000 ? "..." : ""}
+${context.substring(0, 15000)}${context.length > 15000 ? "...\n\n[Content truncated for brevity]" : ""}
 
 INSTRUCTIONS:
 1. Read the query carefully
 2. Review the document content above
-3. Identify the most relevant sections (nodes) that answer the query
+3. Identify the most relevant sections that answer the query
 4. Return the node IDs of the most relevant sections, one per line
-5. Prioritize sections that directly answer the query over general context
+5. Each node ID is marked with [ID: node-...] in the content
+6. Prioritize sections that directly answer the query
+7. Return ONLY node IDs, one per line, in order of relevance
 
-Return ONLY the node IDs, one per line, in order of relevance. Each node ID starts with "node-".`;
+Format: Return one node ID per line, starting with "node-"`;
 }
 
 /**
- * Call LLM API
+ * Call OpenClaw LLM API
  */
-async function callLLM(prompt: string, provider: LLMProvider): Promise<string> {
-  // This will be replaced with actual OpenClaw LLM integration
-  // For now, return a mock response
-  console.log("[pageindex-ts] LLM call:", {
+async function callOpenClawLLM(
+  prompt: string,
+  provider: OpenClawLLMProvider
+): Promise<string> {
+  const { apiKey, baseUrl, model, api = "anthropic-messages" } = provider;
+
+  if (!apiKey) {
+    throw new Error("LLM provider requires apiKey");
+  }
+
+  console.log("[openclaw-pageindex] LLM call:", {
     provider: provider.name,
-    model: provider.model,
+    model,
+    api,
     promptLength: prompt.length,
   });
 
-  // TODO: Integrate with OpenClaw's LLM providers
-  return "";
+  // Call based on API type
+  if (api === "anthropic-messages") {
+    return await callAnthropic(prompt, apiKey, baseUrl, model);
+  } else if (api === "openai-completions") {
+    return await callOpenAI(prompt, apiKey, baseUrl, model);
+  } else if (api === "google-generative-ai") {
+    return await callGoogle(prompt, apiKey, model);
+  } else {
+    throw new Error(`Unsupported API type: ${api}`);
+  }
+}
+
+/**
+ * Call Anthropic Messages API (Claude)
+ */
+async function callAnthropic(
+  prompt: string,
+  apiKey: string,
+  baseUrl?: string,
+  model = "claude-3-5-sonnet-20241022"
+): Promise<string> {
+  const url = baseUrl || "https://api.anthropic.com/v1/messages";
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Anthropic API error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.content[0]?.text || data.completion || "";
+}
+
+/**
+ * Call OpenAI Completions API
+ */
+async function callOpenAI(
+  prompt: string,
+  apiKey: string,
+  baseUrl?: string,
+  model = "gpt-4"
+): Promise<string> {
+  const url = baseUrl || "https://api.openai.com/v1/completions";
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      prompt,
+      max_tokens: 2048,
+      temperature: 0.0,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenAI API error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.text?.trim() || "";
+}
+
+/**
+ * Call Google Generative AI API
+ */
+async function callGoogle(
+  prompt: string,
+  apiKey: string,
+  model = "gemini-2.5-flash"
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Google API error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
 /**
@@ -160,7 +304,8 @@ function findNodeById(nodes: DocumentNode[], id: string): DocumentNode | null {
  */
 function extractDocumentId(node: DocumentNode): string {
   // Extract from node ID or use parent's ID
-  return node.id.split("-")[0] || "unknown";
+  const parts = node.id.split("-");
+  return parts[0] || "unknown";
 }
 
 /**
