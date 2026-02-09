@@ -1,8 +1,8 @@
-# PageIndex TypeScript (pageindex-ts)
+# OpenClaw PageIndex (openclaw-pageindex)
 
-**Vectorless, reasoning-based document search using LLM traversal of hierarchical document trees.**
+**Vectorless, reasoning-based document search using OpenClaw's LLM providers.**
 
-A TypeScript reimplementation of [PageIndex](https://github.com/VectifyAI/PageIndex), providing a modern, type-safe alternative for Node.js applications.
+A native TypeScript implementation of [PageIndex](https://pageindex.ai)'s hierarchical document tree traversal, designed for OpenClaw integration.
 
 ## ✨ Features
 
@@ -11,25 +11,24 @@ A TypeScript reimplementation of [PageIndex](https://github.com/VectifyAI/PageIn
 - 📚 **Multiple formats** — Supports PDF, Markdown, HTML, and plain text
 - 🎯 **Precise citations** — Returns exact page numbers and section references
 - ⚡ **Fast & lightweight** — No vector embeddings required
-- 🔌 **Easy integration** — Works with any LLM provider
+- 🔌 **Multi-provider support** — Anthropic, OpenAI, Google, and OpenClaw
 - 📦 **Type-safe** — Full TypeScript support
-- 🔄 **Persistent index** — Save and load indexes from disk
+- 🔄 **Fallback strategy** — Keyword search when LLM fails
 
 ## 🚀 Quick Start
 
 ```bash
-npm install pageindex-ts
+npm install openclaw-pageindex
 ```
 
 ```typescript
-import { PageIndex } from "pageindex-ts";
+import { PageIndex } from "openclaw-pageindex";
 
 // Create index with LLM configuration
 const index = new PageIndex({
   llmProvider: {
-    name: "openai",
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4",
+    name: "openclaw", // Uses OpenClaw's configured LLM
+    model: "claude-opus-4-6",
   },
   cacheEnabled: true,
 });
@@ -94,18 +93,56 @@ Document (root)
 ```typescript
 const index = new PageIndex({
   llmProvider: {
-    name: "openai" | "anthropic" | "custom",
-    apiKey: "your-api-key",
-    baseUrl: "https://api.example.com", // Optional for custom providers
-    model: "gpt-4" | "claude-3-opus" | "custom-model",
-    maxTokens: 4096,
-    temperature: 0.0, // Lower for more deterministic search
+    name: "anthropic" | "openai" | "google" | "openclaw",
+    apiKey: "your-api-key", // Required for Anthropic, OpenAI, Google
+    baseUrl: "https://api.example.com", // Optional custom endpoint
+    model: "gpt-4" | "claude-opus-4-6" | "gemini-2.5-flash",
+    api: "anthropic-messages" | "openai-completions" | "google-generative-ai",
   },
   cacheEnabled: true, // Enable result caching
   cacheSize: 100, // Number of cached results
-  indexPath: "./pageindex-cache", // Path for persistent storage
   debug: false, // Enable debug logging
 });
+```
+
+### LLM Providers
+
+**Anthropic (Claude):**
+```typescript
+{
+  name: "anthropic",
+  model: "claude-opus-4-6",
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  api: "anthropic-messages",
+}
+```
+
+**OpenAI:**
+```typescript
+{
+  name: "openai",
+  model: "gpt-4",
+  apiKey: process.env.OPENAI_API_KEY,
+  api: "openai-completions",
+}
+```
+
+**Google (Gemini):**
+```typescript
+{
+  name: "google",
+  model: "gemini-2.5-flash",
+  apiKey: process.env.GOOGLE_API_KEY,
+  api: "google-generative-ai",
+}
+```
+
+**OpenClaw (Recommended):**
+```typescript
+{
+  name: "openclaw",
+  model: "claude-opus-4-6", // Uses OpenClaw's configured model
+}
 ```
 
 ## 📚 Supported Document Types
@@ -192,9 +229,9 @@ See [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 
-- **GitHub**: https://github.com/joshuaswarren/pageindex-ts
-- **NPM**: https://www.npmjs.com/package/pageindex-ts
-- **Issues**: https://github.com/joshuaswarren/pageindex-ts/issues
+- **GitHub**: https://github.com/joshuaswarren/openclaw-pageindex
+- **NPM**: https://www.npmjs.com/package/openclaw-pageindex
+- **Issues**: https://github.com/joshuaswarren/openclaw-pageindex/issues
 
 ---
 
