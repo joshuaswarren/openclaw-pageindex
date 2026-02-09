@@ -16,12 +16,19 @@ interface OpenClawLLMProvider {
 }
 
 /**
+ * Custom LLM client function type
+ * Takes a prompt string and returns the LLM response
+ */
+export type LLMClientFunction = (prompt: string) => Promise<string>;
+
+/**
  * LLM-based search using document tree traversal with OpenClaw integration
  */
 export async function searchWithLLM(
   documents: DocumentNode[],
   query: SearchQuery,
-  provider: OpenClawLLMProvider
+  provider: OpenClawLLMProvider,
+  customLLMClient?: LLMClientFunction
 ): Promise<SearchResult[]> {
   const results: SearchResult[] = [];
 
@@ -32,7 +39,7 @@ export async function searchWithLLM(
   const prompt = buildSearchPrompt(query.query, context);
 
   try {
-    const response = await callOpenClawLLM(prompt, provider);
+    const response = await callOpenClawLLM(prompt, provider, customLLMClient);
     const relevantIds = parseLLMResponse(response);
 
     // Build results from relevant nodes
@@ -129,8 +136,20 @@ Format: Return one node ID per line, starting with "node-"`;
  */
 async function callOpenClawLLM(
   prompt: string,
-  provider: OpenClawLLMProvider
+  provider: OpenClawLLMProvider,
+  customLLMClient?: LLMClientFunction
 ): Promise<string> {
+  // If custom LLM client is provided, use it
+  if (customLLMClient) {
+    console.log("[openclaw-pageindex] Using custom LLM client:", {
+      provider: provider.name,
+      model: provider.model,
+      promptLength: prompt.length,
+    });
+    return await customLLMClient(prompt);
+  }
+
+  // Otherwise use direct API calls
   const { apiKey, baseUrl, model, api = "anthropic-messages" } = provider;
 
   if (!apiKey) {

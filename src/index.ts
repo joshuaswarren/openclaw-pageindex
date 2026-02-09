@@ -15,6 +15,7 @@ import type {
   PageIndexConfig,
   IndexStats,
   LLMProvider,
+  LLMClientFunction,
 } from "./types.js";
 import { parseDocument } from "./parsers.js";
 import { searchWithLLM } from "./llm.js";
@@ -75,7 +76,12 @@ export class PageIndex {
         )
       : this.nodes;
 
-    return searchWithLLM(filteredNodes, query, this.config.llmProvider);
+    return searchWithLLM(
+      filteredNodes,
+      query,
+      this.config.llmProvider,
+      this.config.customLLMClient
+    );
   }
 
   /**
@@ -168,6 +174,7 @@ export type {
   PageIndexConfig,
   IndexStats,
   LLMProvider,
+  LLMClientFunction,
 };
 
 // Export parsers for advanced usage

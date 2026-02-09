@@ -14,6 +14,7 @@ A native TypeScript implementation of [PageIndex](https://pageindex.ai)'s hierar
 - 🔌 **Multi-provider support** — Anthropic, OpenAI, Google, and OpenClaw
 - 📦 **Type-safe** — Full TypeScript support
 - 🔄 **Fallback strategy** — Keyword search when LLM fails
+- 🏠 **Custom LLM client** — Use local LLMs (Ollama, vLLM, LM Studio) with any provider
 
 ## 🚀 Quick Start
 
@@ -144,6 +145,49 @@ const index = new PageIndex({
   model: "claude-opus-4-6", // Uses OpenClaw's configured model
 }
 ```
+
+## 🏠 Custom LLM Client
+
+PageIndex supports custom LLM clients for local or specialized models:
+
+```typescript
+import { PageIndex } from "openclaw-pageindex";
+
+// Define your custom LLM client
+const myLocalLLM = async (prompt: string): Promise<string> => {
+  const response = await fetch("http://localhost:1234/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "qwen3-coder-30b-a3b-instruct-mlx@8bit",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1000
+    })
+  });
+  const data = await response.json();
+  return data.choices[0].message.content;
+};
+
+// Use with PageIndex
+const index = new PageIndex({
+  llmProvider: {
+    name: "local-vllm",
+    model: "qwen3-coder-30b-a3b-instruct-mlx@8bit",
+  },
+  customLLMClient: myLocalLLM, // Your custom function
+  cacheEnabled: true,
+});
+```
+
+**Use Cases:**
+- **Local LLMs** — Ollama, vLLM, LM Studio, MLX
+- **Specialized models** — Fine-tuned domain-specific models
+- **Cost optimization** — Use smaller local models for simple queries
+- **Privacy** — Keep document processing on-premise
+- **Hybrid approach** — Local LLM with cloud fallback
+
+**Fallback Behavior:**
+When `customLLMClient` is provided, PageIndex uses it for all search operations. If the custom client fails, PageIndex automatically falls back to keyword search.
 
 ## 📚 Supported Document Types
 

@@ -76,13 +76,21 @@ export interface LLMProvider {
   model: string;
   maxTokens?: number;
   temperature?: number;
+  api?: "anthropic-messages" | "openai-completions" | "google-generative-ai";
 }
+
+/**
+ * Custom LLM client function type
+ * Takes a prompt string and returns the LLM response
+ */
+export type LLMClientFunction = (prompt: string) => Promise<string>;
 
 /**
  * PageIndex configuration
  */
 export interface PageIndexConfig {
   llmProvider: LLMProvider;
+  customLLMClient?: LLMClientFunction; // Optional custom LLM client for advanced use cases
   cacheEnabled?: boolean;
   cacheSize?: number;
   indexPath?: string;
